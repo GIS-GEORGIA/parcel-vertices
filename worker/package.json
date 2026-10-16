@@ -1,0 +1,16 @@
+{
+  "name": "parcel-vertices-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "types": "wrangler types",
+    "check": "tsc --noEmit",
+    "db:local": "wrangler d1 migrations apply parcel-vertices --local",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "wrangler": "^4.0.0"
+  }
+}
