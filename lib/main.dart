@@ -97,12 +97,21 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _save(String ext, String content, MimeType mt) async {
-    await FileSaver.instance.saveFile(
-      name: _base,
-      bytes: Uint8List.fromList(utf8.encode(content)),
-      fileExtension: ext,
-      mimeType: mt,
-    );
+    String msg;
+    try {
+      final path = await FileSaver.instance.saveFile(
+        name: _base,
+        bytes: Uint8List.fromList(utf8.encode(content)),
+        fileExtension: ext,
+        mimeType: mt,
+      );
+      msg = 'შენახულია: $path';
+    } catch (e) {
+      msg = 'შენახვა ვერ მოხერხდა: $e';
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: SelectableText(msg), duration: const Duration(seconds: 6)));
   }
 
   @override
