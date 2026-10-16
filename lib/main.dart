@@ -61,6 +61,13 @@ class _HomePageState extends State<HomePage> {
   Crs _crs = Crs.utm;
   int _zone = 38;
 
+  /// Pre-selected demo parcels: different cities, UTM zones and sizes.
+  static const _examples = [
+    ('01.13.08.001.009', 'ex_tbilisi'),
+    ('03.03.26.242', 'ex_kutaisi'),
+    ('05.21.22.002', 'ex_batumi'),
+  ];
+
   String _errText() {
     final e = _errObj;
     if (e is NaprException) return s.f(e.key, [e.detail]);
@@ -231,6 +238,20 @@ class _HomePageState extends State<HomePage> {
                   : const Icon(Icons.search),
               label: Text(s['search']),
             ),
+          ]),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+            Text(s['examples'], style: Theme.of(context).textTheme.bodySmall),
+            for (final e in _examples)
+              ActionChip(
+                label: Text(s[e.$2]),
+                onPressed: _busy
+                    ? null
+                    : () {
+                        _code.text = e.$1;
+                        _find();
+                      },
+              ),
           ]),
           if (_errObj != null)
             Padding(
