@@ -10,22 +10,40 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'dxf.dart';
 import 'geo.dart';
+import 'l10n.dart';
 import 'napr_client.dart';
+import 'settings.dart';
+import 'settings_page.dart';
 
-void main() => runApp(const App());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final settings = Settings();
+  await settings.load();
+  runApp(App(settings: settings));
+}
 
 class App extends StatelessWidget {
-  const App({super.key});
+  final Settings settings;
+  const App({super.key, required this.settings});
   @override
-  Widget build(BuildContext context) => MaterialApp(
-        title: 'ნაკვეთის წვეროები',
-        theme: ThemeData(colorSchemeSeed: Colors.green, useMaterial3: true),
-        home: const HomePage(),
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: settings,
+        builder: (_, _) => MaterialApp(
+          title: settings.s['app_title'],
+          themeMode: settings.theme,
+          theme: ThemeData(colorSchemeSeed: Colors.green, useMaterial3: true),
+          darkTheme: ThemeData(
+              colorSchemeSeed: Colors.green,
+              brightness: Brightness.dark,
+              useMaterial3: true),
+          home: HomePage(settings: settings),
+        ),
       );
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final Settings settings;
+  const HomePage({super.key, required this.settings});
   @override
   State<HomePage> createState() => _HomePageState();
 }
@@ -35,20 +53,28 @@ enum Crs { wgs84, utm }
 class _HomePageState extends State<HomePage> {
   final _code = TextEditingController();
   final _client = NaprClient();
+  S get s => widget.settings.s;
+  Object? _errObj;
   bool _busy = false;
-  String? _error, _title;
+  String? _title;
   List<Ring> _rings = [];
   Crs _crs = Crs.utm;
   int _zone = 38;
 
+  String _errText() {
+    final e = _errObj;
+    if (e is NaprException) return s.f(e.key, [e.detail]);
+    return s.f('err_network', [e]);
+  }
+
   Future<void> _find() async {
     setState(() {
       _busy = true;
-      _error = null;
+      _errObj = null;
     });
     try {
       final m = await _client.search(_code.text);
-      if (m.isEmpty) throw NaprException('კოდი ვერ მოიძებნა: ${_code.text}');
+      if (m.isEmpty) throw NaprException('err_not_found', _code.text);
       final feats = await _client.features(m.first.lbl);
       final rings = parseWkt(feats.first.wkt);
       setState(() {
@@ -60,7 +86,7 @@ class _HomePageState extends State<HomePage> {
       });
     } catch (e) {
       setState(() {
-        _error = '$e';
+        _errObj = e;
         _rings = [];
       });
     } finally {
@@ -106,12 +132,12 @@ class _HomePageState extends State<HomePage> {
         bytes: Uint8List.fromList(utf8.encode(content)),
         fileExtension: ext,
         mimeType: mt,
-        dialogTitle: 'ფაილის შენახვა',
+        dialogTitle: s['save_title'],
       );
       if (path == null) return; // user cancelled
-      msg = 'შენახულია: $path';
+      msg = s.f('saved', [path]);
     } catch (e) {
-      msg = 'შენახვა ვერ მოხერხდა: $e';
+      msg = s.f('save_failed', [e]);
     }
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -132,7 +158,7 @@ class _HomePageState extends State<HomePage> {
     final ok = await launchUrl(u, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('აპლიკაცია ვერ გაიხსნა')));
+          .showSnackBar(SnackBar(content: Text(s['cannot_open'])));
     }
   }
 
@@ -172,7 +198,14 @@ class _HomePageState extends State<HomePage> {
       for (final r in _rings) for (final p in r.pts) LatLng(p.lat, p.lon)
     ];
     return Scaffold(
-      appBar: AppBar(title: const Text('ნაკვეთის წვეროები')),
+      appBar: AppBar(title: Text(s['app_title']), actions: [
+        IconButton(
+          tooltip: s['settings'],
+          icon: const Icon(Icons.settings),
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => SettingsPage(settings: widget.settings))),
+        ),
+      ]),
       body: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -180,8 +213,8 @@ class _HomePageState extends State<HomePage> {
             Expanded(
               child: TextField(
                 controller: _code,
-                decoration: const InputDecoration(
-                    labelText: 'საკადასტრო კოდი',
+                decoration: InputDecoration(
+                    labelText: s['code_label'],
                     hintText: '01.19.38.003.098',
                     border: OutlineInputBorder()),
                 onSubmitted: (_) => _find(),
@@ -196,13 +229,13 @@ class _HomePageState extends State<HomePage> {
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.search),
-              label: const Text('ძებნა'),
+              label: Text(s['search']),
             ),
           ]),
-          if (_error != null)
+          if (_errObj != null)
             Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text(_error!,
+                child: Text(_errText(),
                     style: TextStyle(color: Theme.of(context).colorScheme.error))),
           if (_rings.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -228,7 +261,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               OutlinedButton.icon(
                 icon: const Icon(Icons.copy),
-                label: const Text('კოპირება'),
+                label: Text(s['copy']),
                 onPressed: () => Clipboard.setData(ClipboardData(text: _csv())),
               ),
               OutlinedButton.icon(
@@ -243,16 +276,16 @@ class _HomePageState extends State<HomePage> {
                     buildDxf(_rings, utm: _crs == Crs.utm, zone: _zone), MimeType.other),
               ),
               PopupMenuButton<String>(
-                tooltip: 'გაზიარება',
+                tooltip: s['share'],
                 onSelected: _share,
-                child: const Chip(avatar: Icon(Icons.share, size: 18), label: Text('გაზიარება')),
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'whatsapp', child: Text('WhatsApp')),
-                  PopupMenuItem(value: 'viber', child: Text('Viber')),
-                  PopupMenuItem(value: 'telegram', child: Text('Telegram')),
-                  PopupMenuItem(value: 'email', child: Text('ელფოსტა')),
-                  PopupMenuItem(value: 'sms', child: Text('SMS')),
-                  PopupMenuItem(value: 'system', child: Text('Messenger / სხვა… (+CSV, DXF)')),
+                child: Chip(avatar: const Icon(Icons.share, size: 18), label: Text(s['share'])),
+                itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'whatsapp', child: Text('WhatsApp')),
+                  const PopupMenuItem(value: 'viber', child: Text('Viber')),
+                  const PopupMenuItem(value: 'telegram', child: Text('Telegram')),
+                  PopupMenuItem(value: 'email', child: Text(s['email'])),
+                  const PopupMenuItem(value: 'sms', child: Text('SMS')),
+                  PopupMenuItem(value: 'system', child: Text(s['other_share'])),
                 ],
               ),
             ]),
@@ -266,7 +299,7 @@ class _HomePageState extends State<HomePage> {
                     child: DataTable(
                       columns: [
                         const DataColumn(label: Text('N')),
-                        const DataColumn(label: Text('რგოლი')),
+                        DataColumn(label: Text(s['ring'])),
                         DataColumn(label: Text(_crs == Crs.utm ? 'E (X)' : 'lon')),
                         DataColumn(label: Text(_crs == Crs.utm ? 'N (Y)' : 'lat')),
                       ],
@@ -274,7 +307,7 @@ class _HomePageState extends State<HomePage> {
                         for (final v in _vertices)
                           DataRow(cells: [
                             DataCell(Text('${v.$1}')),
-                            DataCell(Text(v.$2 == 0 ? 'გარე' : 'შიდა ${v.$2}')),
+                            DataCell(Text(v.$2 == 0 ? s['outer'] : s.f('inner', [v.$2]))),
                             DataCell(SelectableText(v.$3)),
                             DataCell(SelectableText(v.$4)),
                           ]),

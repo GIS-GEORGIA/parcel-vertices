@@ -4,10 +4,12 @@ import 'package:http/http.dart' as http;
 /// Public cadastre (maps.gov.ge) client — port of napr_client.py from the
 /// georgian_cadastre QGIS plugin. Geometry is always WGS84 WKT.
 class NaprException implements Exception {
-  final String message;
-  NaprException(this.message);
+  /// l10n key (err_*) plus optional detail substituted for {0}.
+  final String key;
+  final String detail;
+  NaprException(this.key, [this.detail = '']);
   @override
-  String toString() => message;
+  String toString() => '$key $detail';
 }
 
 class ParcelMatch {
@@ -42,19 +44,19 @@ class NaprClient {
       final head = lead.substring(0, lead.length < 400 ? lead.length : 400).toLowerCase();
       if (head.contains('<html') &&
           (head.contains('access denied') || head.contains('oops') || head.contains('not be accessed'))) {
-        throw NaprException('სერვისმა მოთხოვნა უარყო (Access Denied)');
+        throw NaprException('err_denied');
       }
       return t;
     } on NaprException {
       rethrow;
     } catch (e) {
-      throw NaprException('ქსელის შეცდომა: $e');
+      throw NaprException('err_network', '$e');
     }
   }
 
   Future<List<ParcelMatch>> search(String code) async {
     code = code.trim();
-    if (code.isEmpty) throw NaprException('საკადასტრო კოდი ცარიელია');
+    if (code.isEmpty) throw NaprException('err_empty_code');
     final raw = await _text(Uri.parse(_search), form: {'keyword': code, 'keyword_description': ''});
     final data = jsonDecode(raw) as Map<String, dynamic>;
     final out = <ParcelMatch>[];
@@ -88,7 +90,7 @@ class NaprClient {
         if (row['shape'] != null)
           ParcelFeature('${row['id']}', '${row['name'] ?? ''}', row['shape'] as String)
     ];
-    if (out.isEmpty) throw NaprException('ამ ნაკვეთზე გეომეტრია ვერ მოიძებნა');
+    if (out.isEmpty) throw NaprException('err_no_geom');
     return out;
   }
 }
