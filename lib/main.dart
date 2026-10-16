@@ -11,23 +11,29 @@ import 'package:url_launcher/url_launcher.dart';
 import 'dxf.dart';
 import 'geo.dart';
 import 'l10n.dart';
-import 'napr_client.dart';
+import 'api.dart';
+import 'auth_page.dart';
+import 'session.dart';
 import 'settings.dart';
 import 'settings_page.dart';
+import 'store_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final settings = Settings();
   await settings.load();
-  runApp(App(settings: settings));
+  final session = Session();
+  await session.load();
+  runApp(App(settings: settings, session: session));
 }
 
 class App extends StatelessWidget {
   final Settings settings;
-  const App({super.key, required this.settings});
+  final Session session;
+  const App({super.key, required this.settings, required this.session});
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: settings,
+        listenable: Listenable.merge([settings, session]),
         builder: (_, _) => MaterialApp(
           title: settings.s['app_title'],
           themeMode: settings.theme,
@@ -36,14 +42,17 @@ class App extends StatelessWidget {
               colorSchemeSeed: Colors.green,
               brightness: Brightness.dark,
               useMaterial3: true),
-          home: HomePage(settings: settings),
+          home: session.loggedIn
+              ? HomePage(settings: settings, session: session)
+              : AuthPage(settings: settings, session: session),
         ),
       );
 }
 
 class HomePage extends StatefulWidget {
   final Settings settings;
-  const HomePage({super.key, required this.settings});
+  final Session session;
+  const HomePage({super.key, required this.settings, required this.session});
   @override
   State<HomePage> createState() => _HomePageState();
 }
@@ -52,8 +61,9 @@ enum Crs { wgs84, utm }
 
 class _HomePageState extends State<HomePage> {
   final _code = TextEditingController();
-  final _client = NaprClient();
   S get s => widget.settings.s;
+  Session get session => widget.session;
+  Preview? _preview;
   Object? _errObj;
   bool _busy = false;
   String? _title;
@@ -70,7 +80,7 @@ class _HomePageState extends State<HomePage> {
 
   String _errText() {
     final e = _errObj;
-    if (e is NaprException) return s.f(e.key, [e.detail]);
+    if (e is ApiException) return s.f(e.key, [e.detail]);
     return s.f('err_network', [e]);
   }
 
@@ -78,27 +88,58 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _busy = true;
       _errObj = null;
+      _rings = [];
+      _preview = null;
     });
     try {
-      final m = await _client.search(_code.text);
-      if (m.isEmpty) throw NaprException('err_not_found', _code.text);
-      final feats = await _client.features(m.first.lbl);
-      final rings = parseWkt(feats.first.wkt);
+      final p = await session.api.preview(_code.text);
+      setState(() {
+        _preview = p;
+        _title = '${p.code} — ${p.address}';
+      });
+      // Already-owned parcels open without any charge.
+      if (p.unlocked) await _unlock(auto: true);
+    } catch (e) {
+      await _fail(e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _fail(Object e) async {
+    if (e is ApiException && e.status == 401) await session.expire();
+    if (mounted) setState(() => _errObj = e);
+  }
+
+  Future<void> _unlock({bool auto = false}) async {
+    final p = _preview;
+    if (p == null) return;
+    if (!auto) setState(() => _busy = true);
+    try {
+      final u = await session.api.unlock(p.code);
+      final rings = parseWkt(u.wkt);
+      session.setBalance(u.balance);
       setState(() {
         _rings = rings;
-        _title = '${m.first.code} — ${m.first.address}';
+        _title = '${u.code} — ${u.address}';
         if (rings.isNotEmpty && rings.first.pts.isNotEmpty) {
           _zone = autoZone(rings.first.pts.first.lon);
         }
       });
+    } on ApiException catch (e) {
+      await _fail(e);
+      if (e.key == 'err_no_credits' && mounted) await _openStore();
     } catch (e) {
-      setState(() {
-        _errObj = e;
-        _rings = [];
-      });
+      await _fail(e);
     } finally {
-      setState(() => _busy = false);
+      if (!auto && mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _openStore() async {
+    await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => StorePage(settings: widget.settings, session: session)));
+    await session.refresh();
   }
 
   /// (n, ring, x, y) per vertex in the selected CRS.
@@ -206,11 +247,21 @@ class _HomePageState extends State<HomePage> {
     ];
     return Scaffold(
       appBar: AppBar(title: Text(s['app_title']), actions: [
+        ListenableBuilder(
+          listenable: session,
+          builder: (_, _) => ActionChip(
+            avatar: const Icon(Icons.toll, size: 18),
+            label: Text('${session.balance}'),
+            tooltip: s['buy_credits'],
+            onPressed: _openStore,
+          ),
+        ),
         IconButton(
           tooltip: s['settings'],
           icon: const Icon(Icons.settings),
           onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => SettingsPage(settings: widget.settings))),
+              builder: (_) =>
+                  SettingsPage(settings: widget.settings, session: session))),
         ),
       ]),
       body: Padding(
@@ -258,6 +309,49 @@ class _HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(_errText(),
                     style: TextStyle(color: Theme.of(context).colorScheme.error))),
+          if (_preview != null && _rings.isEmpty) ...[
+            const SizedBox(height: 8),
+            Card(
+              child: ListTile(
+                title: Text(_title ?? ''),
+                subtitle: Text(
+                    "${s.f('preview_vertices', [_preview!.vertices])}\n${s['preview_note']}"),
+                isThreeLine: true,
+                trailing: FilledButton(
+                  onPressed: _busy ? null : _unlock,
+                  child: Text(_preview!.demo ? s['unlock_demo'] : s['unlock_btn']),
+                ),
+              ),
+            ),
+            Expanded(
+              child: FlutterMap(
+                options: MapOptions(
+                  initialCameraFit: CameraFit.coordinates(coordinates: [
+                    LatLng(_preview!.bbox[1], _preview!.bbox[0]),
+                    LatLng(_preview!.bbox[3], _preview!.bbox[2]),
+                  ], padding: const EdgeInsets.all(40)),
+                ),
+                children: [
+                  TileLayer(
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'ge.gisgeorgia.parcel_vertices'),
+                  PolygonLayer(polygons: [
+                    Polygon(
+                      points: [
+                        LatLng(_preview!.bbox[1], _preview!.bbox[0]),
+                        LatLng(_preview!.bbox[1], _preview!.bbox[2]),
+                        LatLng(_preview!.bbox[3], _preview!.bbox[2]),
+                        LatLng(_preview!.bbox[3], _preview!.bbox[0]),
+                      ],
+                      color: Colors.orange.withValues(alpha: .2),
+                      borderColor: Colors.orange,
+                      borderStrokeWidth: 2,
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+          ],
           if (_rings.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(_title ?? '', style: Theme.of(context).textTheme.titleSmall),

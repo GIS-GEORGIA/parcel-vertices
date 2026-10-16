@@ -3,6 +3,7 @@ import 'package:lottie/lottie.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'session.dart';
 import 'settings.dart';
 
 const releaseUrl = 'https://github.com/GIS-GEORGIA/parcel-vertices/releases/latest';
@@ -26,7 +27,8 @@ class AnimatedGithubIcon extends StatelessWidget {
 
 class SettingsPage extends StatelessWidget {
   final Settings settings;
-  const SettingsPage({super.key, required this.settings});
+  final Session session;
+  const SettingsPage({super.key, required this.settings, required this.session});
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +39,26 @@ class SettingsPage extends StatelessWidget {
         return Scaffold(
           appBar: AppBar(title: Text(s['settings'])),
           body: ListView(padding: const EdgeInsets.all(16), children: [
+            Text(s['account'], style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            ListenableBuilder(
+              listenable: session,
+              builder: (_, _) => Card(
+                child: ListTile(
+                  leading: const Icon(Icons.person),
+                  title: Text(session.email ?? ''),
+                  subtitle: Text(s.f('balance', [session.balance])),
+                  trailing: TextButton(
+                    onPressed: () async {
+                      await session.signOut();
+                      if (context.mounted) Navigator.of(context).pop();
+                    },
+                    child: Text(s['logout']),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
             Text(s['language'], style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             SegmentedButton<String>(
