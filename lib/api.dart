@@ -77,11 +77,16 @@ class ApiClient {
     return j;
   }
 
-  Future<String> register(String email, String password) async =>
-      (await _req('POST', '/auth/register', body: {'email': email, 'password': password}))['token'];
+  Future<({String id, String secret, Uri url})> googleBegin() async {
+    final j = await _req('POST', '/auth/google/begin', body: {});
+    return (id: '${j['attempt_id']}', secret: '${j['poll_secret']}', url: Uri.parse('${j['url']}'));
+  }
 
-  Future<String> login(String email, String password) async =>
-      (await _req('POST', '/auth/login', body: {'email': email, 'password': password}))['token'];
+  /// status: pending | ok (token set) | denied | failed
+  Future<({String status, String? token})> googlePoll(String id, String secret) async {
+    final j = await _req('POST', '/auth/google/poll', body: {'attempt_id': id, 'poll_secret': secret});
+    return (status: '${j['status']}', token: j['token'] as String?);
+  }
 
   Future<void> logout() async {
     try {

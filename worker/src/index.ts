@@ -1,4 +1,5 @@
-import { createSession, deleteSession, hashPassword, userFromRequest, verifyPassword } from './auth';
+import { createSession, deleteSession, upsertGoogleUser, userFromRequest } from './auth';
+import * as google from './google';
 import { NaprError, coarseBbox, countVertices, lookupParcel } from './napr';
 import { PaymentsUnavailable, getProvider } from './payments';
 import { DEMO_CODES, PRODUCTS } from './products';
@@ -11,7 +12,6 @@ class HttpError extends Error {
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 const CODE_RE = /^[0-9][0-9.]{3,28}[0-9]$/;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
@@ -72,34 +72,22 @@ async function route(request: Request, env: Env): Promise<Response> {
 
   if (method === 'GET' && path === '/health') return json({ ok: true });
 
-  // ---- auth ----
-  if (method === 'POST' && path === '/auth/register') {
-    const { email, password } = await body<{ email?: string; password?: string }>(request);
-    const e = (email ?? '').trim().toLowerCase();
-    if (!EMAIL_RE.test(e) || e.length > 254) throw new HttpError(400, 'err_bad_email');
-    if (!password || password.length < 8 || password.length > 200) throw new HttpError(400, 'err_weak_password');
-    const id = crypto.randomUUID();
-    const { salt, hash } = await hashPassword(password);
-    try {
-      await env.DB.prepare('INSERT INTO users (id, email, pass_salt, pass_hash, created_at) VALUES (?, ?, ?, ?, ?)')
-        .bind(id, e, salt, hash, nowSec())
-        .run();
-    } catch (err) {
-      if (String(err).includes('UNIQUE')) throw new HttpError(409, 'err_email_taken');
-      throw err;
-    }
-    return json({ token: await createSession(env.DB, id), email: e }, 201);
+  // ---- auth: Google only ----
+  if (method === 'POST' && path === '/auth/google/begin') return json(await google.begin(env), 201);
+  if (method === 'GET' && path === '/auth/google/callback') return google.callback(url, env);
+  if (method === 'POST' && path === '/auth/google/poll') {
+    const { attempt_id, poll_secret } = await body<{ attempt_id?: string; poll_secret?: string }>(request);
+    const r = await google.poll(env, attempt_id ?? '', poll_secret ?? '');
+    if (!r) throw new HttpError(404, 'not_found');
+    return json(r);
   }
 
-  if (method === 'POST' && path === '/auth/login') {
-    const { email, password } = await body<{ email?: string; password?: string }>(request);
-    const u = await env.DB.prepare('SELECT id, pass_salt, pass_hash FROM users WHERE email = ?')
-      .bind((email ?? '').trim().toLowerCase())
-      .first<{ id: string; pass_salt: string; pass_hash: string }>();
-    // Same error and similar work for unknown email / wrong password.
-    const ok = u ? await verifyPassword(password ?? '', u.pass_salt, u.pass_hash) : false;
-    if (!u || !ok) throw new HttpError(401, 'err_bad_credentials');
-    return json({ token: await createSession(env.DB, u.id) });
+  // Local testing only (DEV_LOGIN=1 in worker/.dev.vars). Never set in production.
+  if (method === 'POST' && path === '/auth/dev-login' && env.DEV_LOGIN === '1') {
+    const { email } = await body<{ email?: string }>(request);
+    const e = (email ?? '').trim().toLowerCase();
+    const uid = await upsertGoogleUser(env.DB, { sub: 'dev:' + e, email: e });
+    return json({ token: await createSession(env.DB, uid), email: e }, 201);
   }
 
   if (method === 'POST' && path === '/auth/logout') {

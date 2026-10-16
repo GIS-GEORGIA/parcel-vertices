@@ -10,7 +10,8 @@
   "vars": {
     // "disabled" in production; "mock" only in .dev.vars for local testing. Switch to "flitt" / "keepz" once an adapter exists.
     "PAYMENT_PROVIDER": "disabled",
-    "PUBLIC_BASE_URL": "http://localhost:8787",
+    "PUBLIC_BASE_URL": "https://parcel-vertices-api.kapanadze.workers.dev",
+    "GOOGLE_CLIENT_ID": "951656446664-17dtvd8ouetdt4mfqmho9q67hv5886a4.apps.googleusercontent.com",
     "ALLOWED_ORIGINS": "https://parcelv.qgis.ge,http://localhost:8080"
   },
   "d1_databases": [

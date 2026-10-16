@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'api.dart';
 
@@ -46,10 +47,31 @@ class Session extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<void> signIn(String email, String password, {required bool register}) async {
-    final t = register ? await api.register(email, password) : await api.login(email, password);
-    await _store(t);
-    await refresh();
+  /// Opens Google sign-in in the browser and polls the Worker until it hands out a session.
+  Future<void> signInWithGoogle({required bool Function() cancelled}) async {
+    final b = await api.googleBegin();
+    if (!await launchUrl(b.url, mode: LaunchMode.externalApplication)) {
+      throw ApiException('cannot_open');
+    }
+    final deadline = DateTime.now().add(const Duration(minutes: 10));
+    while (!cancelled() && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (cancelled()) return;
+      try {
+        final r = await api.googlePoll(b.id, b.secret);
+        if (r.status == 'ok' && r.token != null) {
+          await _store(r.token!);
+          await refresh();
+          return;
+        }
+        if (r.status == 'denied') throw ApiException('err_google_denied');
+        if (r.status == 'failed') throw ApiException('err_google_failed');
+      } on ApiException catch (e) {
+        // Transient network errors: keep polling. Anything else is final.
+        if (e.key != 'err_network') rethrow;
+      }
+    }
+    if (!cancelled()) throw ApiException('err_google_timeout');
   }
 
   Future<void> refresh() async {
