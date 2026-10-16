@@ -2,7 +2,7 @@
 
 [ქართული](#ქართული) · [English](#english)
 
-**გადმოწერა / Download:** [უახლესი რელიზი / Latest release](https://github.com/GIS-GEORGIA/parcel-vertices/releases/latest)
+**Web:** https://parcelv.qgis.ge · **გადმოწერა / Download:** [უახლესი რელიზი / Latest release](https://github.com/GIS-GEORGIA/parcel-vertices/releases/latest)
 
 ---
 
@@ -63,6 +63,7 @@ flutter test
 
 ### კონტაქტი და შეტყობინება პრობლემის შესახებ
 - **Bug / იდეა:** გახსენი [Issue](https://github.com/GIS-GEORGIA/parcel-vertices/issues/new) — მიუთითე ვერსია (პარამეტრები → ვერსია), მოწყობილობა/OS, ნაკვეთის კოდი და რა მოხდა.
+- **ელფოსტა:** [aigroegsig@gmail.com](mailto:aigroegsig@gmail.com) (GIS GEORGIA) · [kapan.gio777@gmail.com](mailto:kapan.gio777@gmail.com) (ავტორი)
 - **ორგანიზაცია:** [GIS-GEORGIA](https://github.com/GIS-GEORGIA)
 - დაკავშირებული პროექტი: [georgian_cadastre QGIS პლაგინი](https://github.com/GIS-GEORGIA/qgis-plugins-repo/tree/main/georgian_cadastre) — იგივე API.
 
@@ -131,6 +132,7 @@ flutter test
 
 ### Contact & reporting problems
 - **Bug / idea:** open an [Issue](https://github.com/GIS-GEORGIA/parcel-vertices/issues/new) and include the app version (Settings → Version), device/OS, the parcel code and what happened.
+- **Email:** [aigroegsig@gmail.com](mailto:aigroegsig@gmail.com) (GIS GEORGIA) · [kapan.gio777@gmail.com](mailto:kapan.gio777@gmail.com) (author)
 - **Organization:** [GIS-GEORGIA](https://github.com/GIS-GEORGIA)
 - Related project: [georgian_cadastre QGIS plugin](https://github.com/GIS-GEORGIA/qgis-plugins-repo/tree/main/georgian_cadastre) — same API.
 
