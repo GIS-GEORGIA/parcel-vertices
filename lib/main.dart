@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'dxf.dart';
 import 'geo.dart';
@@ -99,12 +101,14 @@ class _HomePageState extends State<HomePage> {
   Future<void> _save(String ext, String content, MimeType mt) async {
     String msg;
     try {
-      final path = await FileSaver.instance.saveFile(
+      final path = await FileSaver.instance.saveAs(
         name: _base,
         bytes: Uint8List.fromList(utf8.encode(content)),
         fileExtension: ext,
         mimeType: mt,
+        dialogTitle: 'ფაილის შენახვა',
       );
+      if (path == null) return; // user cancelled
       msg = 'შენახულია: $path';
     } catch (e) {
       msg = 'შენახვა ვერ მოხერხდა: $e';
@@ -112,6 +116,54 @@ class _HomePageState extends State<HomePage> {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: SelectableText(msg), duration: const Duration(seconds: 6)));
+  }
+
+
+  String _shareText() {
+    final b = StringBuffer('${_title ?? _base}\n');
+    b.writeln(_crs == Crs.utm ? 'UTM ${_zone}N (EPSG:326$_zone)' : 'WGS84 (EPSG:4326)');
+    for (final v in _vertices) {
+      b.writeln('${v.$1}. ${v.$3}, ${v.$4}');
+    }
+    return b.toString();
+  }
+
+  Future<void> _open(Uri u) async {
+    final ok = await launchUrl(u, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('აპლიკაცია ვერ გაიხსნა')));
+    }
+  }
+
+  Future<void> _share(String target) async {
+    final t = _shareText();
+    final q = Uri.encodeComponent(t);
+    switch (target) {
+      case 'whatsapp':
+        return _open(Uri.parse('https://wa.me/?text=$q'));
+      case 'viber':
+        return _open(Uri.parse('viber://forward?text=$q'));
+      case 'telegram':
+        return _open(Uri.parse('https://t.me/share/url?url=%20&text=$q'));
+      case 'email':
+        return _open(Uri.parse(
+            'mailto:?subject=${Uri.encodeComponent(_title ?? _base)}&body=$q'));
+      case 'sms':
+        return _open(Uri.parse('sms:?body=$q'));
+      default: // system sheet: Messenger, Facebook, etc., with CSV + DXF attached
+        final csv = Uint8List.fromList(utf8.encode(_csv()));
+        final dxf = Uint8List.fromList(utf8.encode(
+            buildDxf(_rings, utm: _crs == Crs.utm, zone: _zone)));
+        await SharePlus.instance.share(ShareParams(
+          text: t,
+          subject: _title ?? _base,
+          files: [
+            XFile.fromData(csv, name: '$_base.csv', mimeType: 'text/csv'),
+            XFile.fromData(dxf, name: '$_base.dxf', mimeType: 'application/dxf'),
+          ],
+        ));
+    }
   }
 
   @override
@@ -189,6 +241,19 @@ class _HomePageState extends State<HomePage> {
                 label: const Text('DXF'),
                 onPressed: () => _save('dxf',
                     buildDxf(_rings, utm: _crs == Crs.utm, zone: _zone), MimeType.other),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'გაზიარება',
+                onSelected: _share,
+                child: const Chip(avatar: Icon(Icons.share, size: 18), label: Text('გაზიარება')),
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'whatsapp', child: Text('WhatsApp')),
+                  PopupMenuItem(value: 'viber', child: Text('Viber')),
+                  PopupMenuItem(value: 'telegram', child: Text('Telegram')),
+                  PopupMenuItem(value: 'email', child: Text('ელფოსტა')),
+                  PopupMenuItem(value: 'sms', child: Text('SMS')),
+                  PopupMenuItem(value: 'system', child: Text('Messenger / სხვა… (+CSV, DXF)')),
+                ],
               ),
             ]),
             const SizedBox(height: 8),
