@@ -8,8 +8,8 @@
     "traces": { "enabled": true }
   },
   "vars": {
-    // "mock" for local testing. Switch to "flitt" / "keepz" once an adapter exists.
-    "PAYMENT_PROVIDER": "mock",
+    // "disabled" in production; "mock" only in .dev.vars for local testing. Switch to "flitt" / "keepz" once an adapter exists.
+    "PAYMENT_PROVIDER": "disabled",
     "PUBLIC_BASE_URL": "http://localhost:8787",
     "ALLOWED_ORIGINS": "https://parcelv.qgis.ge,http://localhost:8080"
   },
@@ -17,8 +17,7 @@
     {
       "binding": "DB",
       "database_name": "parcel-vertices",
-      // Replace with the real id from `wrangler d1 create parcel-vertices` before deploying.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "871c243d-a74c-4acb-b864-38cada061dd8",
       "migrations_dir": "migrations"
     }
   ]

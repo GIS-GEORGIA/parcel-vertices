@@ -27,8 +27,23 @@ const mock: PaymentProvider = {
   },
 };
 
+/** Used until a real gateway is wired: orders are refused with a clear error. */
+export class PaymentsUnavailable extends Error {}
+
+const disabled: PaymentProvider = {
+  name: 'disabled',
+  async createCheckout() {
+    throw new PaymentsUnavailable('payments_unavailable');
+  },
+  async verifyWebhook() {
+    return null;
+  },
+};
+
 export function getProvider(env: Env): PaymentProvider {
   switch (env.PAYMENT_PROVIDER) {
+    case 'disabled':
+      return disabled;
     case 'mock':
       return mock;
     default:

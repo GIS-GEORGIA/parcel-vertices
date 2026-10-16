@@ -144,11 +144,14 @@ Flutter · API: `maps.gov.ge` (`/map/portal/search`, `/lr/bo/mg/getinfo.alpha`) 
 
 ## Development: accounts & credits (Worker)
 
-The app now signs users in and unlocks coordinates through the Worker in `worker/`.
+The app signs users in and unlocks coordinates through the Cloudflare Worker in `worker/`.
+Production API: `https://parcel-vertices-api.kapanadze.workers.dev` (payments disabled until a gateway is wired).
+
+Local Worker + app:
 
 ```bash
-cd worker && npm install && npm run db:local && npm run dev   # http://localhost:8787
+cd worker && npm install && npm run db:local && npm run dev   # http://localhost:8787 (mock payments via .dev.vars)
 flutter run -d windows --dart-define=API_BASE=http://localhost:8787
 ```
 
-Android emulator: use `--dart-define=API_BASE=http://10.0.2.2:8787`. The public APK/web build must not be released until the Worker is deployed and `API_BASE` points to it.
+Android emulator: `--dart-define=API_BASE=http://10.0.2.2:8787`.

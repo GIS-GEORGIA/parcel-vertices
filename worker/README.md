@@ -35,4 +35,4 @@ npx wrangler d1 migrations apply parcel-vertices --remote
 # set PUBLIC_BASE_URL, PAYMENT_PROVIDER, ALLOWED_ORIGINS in wrangler.jsonc
 npx wrangler deploy
 ```
-Do not deploy with `PAYMENT_PROVIDER=mock`: it lets anyone credit themselves.
+Production runs with `PAYMENT_PROVIDER=disabled` (orders return 503). Never deploy with `mock`: it lets anyone credit themselves. For local testing put `PAYMENT_PROVIDER=mock` in `worker/.dev.vars` (gitignored).

@@ -1,6 +1,6 @@
 import { createSession, deleteSession, hashPassword, userFromRequest, verifyPassword } from './auth';
 import { NaprError, coarseBbox, countVertices, lookupParcel } from './napr';
-import { getProvider } from './payments';
+import { PaymentsUnavailable, getProvider } from './payments';
 import { DEMO_CODES, PRODUCTS } from './products';
 
 class HttpError extends Error {
@@ -176,7 +176,14 @@ async function route(request: Request, env: Env): Promise<Response> {
     const provider = getProvider(env);
     const id = crypto.randomUUID();
     const order = { id, amountTetri: product.amountTetri, currency: 'GEL', productId: product.id };
-    const { checkoutUrl, providerRef } = await provider.createCheckout(order, env);
+    let checkout: { checkoutUrl: string; providerRef: string };
+    try {
+      checkout = await provider.createCheckout(order, env);
+    } catch (e) {
+      if (e instanceof PaymentsUnavailable) throw new HttpError(503, 'err_payments_unavailable');
+      throw e;
+    }
+    const { checkoutUrl, providerRef } = checkout;
     await env.DB.prepare(
       `INSERT INTO orders (id, user_id, product_id, credits, amount_tetri, currency, status, provider, provider_ref, created_at)
        VALUES (?, ?, ?, ?, ?, 'GEL', 'pending', ?, ?, ?)`,

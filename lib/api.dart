@@ -3,9 +3,9 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-/// Worker base URL. Override per build: --dart-define=API_BASE=https://api.example.com
+/// Worker base URL (production). For a local Worker: --dart-define=API_BASE=http://localhost:8787
 /// (Android emulator reaches the host machine at http://10.0.2.2:8787).
-const apiBase = String.fromEnvironment('API_BASE', defaultValue: 'http://localhost:8787');
+const apiBase = String.fromEnvironment('API_BASE', defaultValue: 'https://parcel-vertices-api.kapanadze.workers.dev');
 
 class ApiException implements Exception {
   /// l10n key (err_*, unauthorized, ...).
